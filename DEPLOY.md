@@ -108,26 +108,42 @@ echo "----------------------------------------------------------------"
 Eğer "Invalid Target" veya "Authentication Failed" hatası alıyorsanız, aşağıdaki "Tamir Kodu"nu Cloud Shell'e yapıştırın. Bu kod mevcut ayarları silip her şeyi sıfırdan doğrusuyla kurar:
 
 ```bash
-# --- TAMİR KODU ---
+# --- KESİN ÇÖZÜM KODU (ORGANIZATION POLICY BYPASS) ---
 export PROJECT_ID="project-33f269e2-c8b3-4f34-a2a"
 export GITHUB_REPO="fatihsaribiyik2003/agentic_rag"
 
-# Eskiyi Sil
-gcloud iam workload-identity-pools providers delete "github-provider" \
-  --project="${PROJECT_ID}" --location="global" --workload-identity-pool="github-pool" --quiet || true
-
-# Yenisini Kur
-gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+# 1. Havuz (my-pool-final)
+gcloud iam workload-identity-pools create "my-pool-final" \
   --project="${PROJECT_ID}" \
   --location="global" \
-  --workload-identity-pool="github-pool" \
-  --display-name="GitHub Provider" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+  --display-name="My GitHub Pool Final"
+
+# 2. Sağlayıcı (KOŞUL EKLİ!) - Hata vermeyecek kısım burası
+gcloud iam workload-identity-pools providers create-oidc "my-provider-final" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --workload-identity-pool="my-pool-final" \
+  --display-name="My GitHub Provider Final" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner_id=assertion.repository_owner_id" \
+  --attribute-condition="assertion.repository_owner_id != 'google'" \
   --issuer-uri="https://token.actions.githubusercontent.com"
 
-# Yeni Değeri Ver
-echo "YENİ SECRET DEĞERİNİZ:"
-gcloud iam workload-identity-pools providers describe "github-provider" \
-  --project="${PROJECT_ID}" --location="global" --workload-identity-pool="github-pool" --format="value(name)"
+# 3. İzinler
+export PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')
+
+gcloud iam service-accounts add-iam-policy-binding "github-deploy@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --project="${PROJECT_ID}" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/my-pool-final/attribute.repository/${GITHUB_REPO}"
+
+# 4. Sonuç (Bunu kopyalayın)
+echo "---------------------------------------------------"
+echo "BUNU GITHUB SECRET YERİNE YAPIŞTIRIN:"
+gcloud iam workload-identity-pools providers describe "my-provider-final" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --workload-identity-pool="my-pool-final" \
+  --format="value(name)"
+echo "---------------------------------------------------"
 ```
 Bu kodun verdiği yeni sonucu GitHub Secret'a tekrar ekleyin.
