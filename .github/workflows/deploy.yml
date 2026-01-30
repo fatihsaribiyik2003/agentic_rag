@@ -37,15 +37,15 @@ jobs:
 
       - name: Build and Push Container
         run: |
-          docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} .
-          docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }}
+          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/repo-agentic/$SERVICE_NAME:${{ github.sha }} .
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/repo-agentic/$SERVICE_NAME:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          image: us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/repo-agentic/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
             GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
             
