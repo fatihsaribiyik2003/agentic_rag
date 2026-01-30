@@ -34,8 +34,25 @@ This project implements an **Agentic RAG (Retrieval Augmented Generation)** syst
     GOOGLE_API_KEY=your_api_key_here
     ```
 
-## Usage
+## Usage (Server / API)
+Recommended for production or external access.
 
+1.  **Run the Server:**
+    ```bash
+    uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+    ```
+
+2.  **API Documentation:**
+    Once running, visit `http://localhost:8000/docs` for the interactive Swagger UI.
+
+3.  **Example Request:**
+    ```bash
+    curl -X POST "http://localhost:8000/ask" \
+         -H "Content-Type: application/json" \
+         -d '{"question": "What is this document about?"}'
+    ```
+
+## Usage (CLI - Legacy)
 1.  Place your PDF files into the `database/` folder.
 2.  Run the agent:
     ```bash
