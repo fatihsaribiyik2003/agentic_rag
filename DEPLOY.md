@@ -1,61 +1,102 @@
-# Cloud Run Dağıtım Rehberi
+# Cloud Run Dağıtım Rehberi (Key Gerektirmez)
 
-Bu rehber, dahil edilen GitHub Actions iş akışını kullanarak bu uygulamayı Google Cloud Run'a nasıl dağıtacağınızı (deploy edeceğinizi) açıklar.
+Kuruluşunuz (Organization) güvenlik nedeniyle "Key" (Anahtar) oluşturmayı engellediği için, daha güvenli olan **Workload Identity Federation** yöntemini kullanacağız. Bu yöntem **Google Cloud Shell** kullanılarak çok daha hızlı kurulabilir.
 
 ## Ön Gereksinimler
 
 1.  Bir Google Cloud Platform (GCP) Hesabı.
-2.  Bu GitHub Deposuna (Repository) erişim.
+2.  Bu GitHub Deposuna erişim.
 
-## 1. Adım: Google Cloud Kurulumu
+## 1. Adım: Cloud Shell ile Hızlı Kurulum
 
-1.  **Proje Oluşturun**:
-    *   [Google Cloud Console](https://console.cloud.google.com/) adresine gidin.
-    *   Yeni bir proje oluşturun (örneğin: `agentic-rag-prod`).
-    *   **Project ID** (Proje Kimliği) değerini bir kenara not edin (örneğin: `agentic-rag-prod-12345`).
+1.  [Google Cloud Console](https://console.cloud.google.com/) adresine gidin.
+2.  Sağ üstteki **>_** simgesine tıklayarak **Cloud Shell**'i açın (Ekranın altında siyah bir terminal açılacak).
+3.  Aşağıdaki kod bloğunu **tek seferde kopyalayın**, Cloud Shell'e yapıştırın ve `Enter` tuşuna basın.
+    *   *Not: Yapıştırdıktan sonra "Authorize" penceresi çıkarsa onay verin.*
 
-2.  **API'leri Etkinleştirin**:
-    *   Menüden "APIs & Services" > "Enabled APIs & services" kısmına gidin.
-    *   "+ ENABLE APIS AND SERVICES" butonuna tıklayın.
-    *   Aşağıdaki servisleri aratıp etkinleştirin (Enable):
-        *   **Cloud Run Admin API**
-        *   **Container Registry API** (veya Artifact Registry API)
-        *   **Cloud Build API** (isteğe bağlı, ama önerilir)
+```bash
+# --- AYARLAR (BURAYI KENDİNİZE GÖRE DÜZENLEMEYİN, OTOMATİK AYARLANMIŞTIR) ---
+export PROJECT_ID="agentic-rag-prod-12345"  # <--- BURAYA KENDİ PROJE ID'NİZİ YAZIN!!!
+export GITHUB_REPO="fatihsaribiyik2003/agentic_rag" # GitHub kullanıcı/repo adınız
+# ----------------------------------------------------------------------------
 
-3.  **Servis Hesabı (Service Account) Oluşturun**:
-    *   "IAM & Admin" > "Service Accounts" kısmına gidin.
-    *   "+ CREATE SERVICE ACCOUNT" butonuna tıklayın.
-    *   İsim: `github-deploy` (veya istediğiniz bir isim).
-    *   **Roller (Roles)**: Aşağıdaki yetkileri verin:
-        *   `Cloud Run Admin`
-        *   `Service Account User`
-        *   `Storage Admin` (Container Registry için)
-    *   "Done" diyerek bitirin.
+# 1. API'leri Aç
+gcloud services enable iamcredentials.googleapis.com \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudbuild.googleapis.com \
+  --project "${PROJECT_ID}"
 
-4.  **Anahtar (Key) Oluşturun**:
-    *   Yeni oluşturduğunuz servis hesabına tıklayın (örn: `github-deploy@...`).
-    *   "Keys" sekmesine gelin.
-    *   "Add Key" > "Create new key" seçeneğini tıklayın ve **JSON** formatını seçin.
-    *   Dosya bilgisayarınıza inecek. **Bu dosyayı kaybetmeyin ve kimseyle paylaşmayın!**
+# 2. Servis Hesabı Oluştur
+gcloud iam service-accounts create github-deploy \
+  --display-name "GitHub Actions" \
+  --project "${PROJECT_ID}"
+
+# 3. Yetkileri Ver
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:github-deploy@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:github-deploy@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:github-deploy@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:github-deploy@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.admin"
+
+# 4. Workload Identity Havuzu Oluştur
+gcloud iam workload-identity-pools create "github-pool" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --display-name="GitHub Pool"
+
+# 5. Sağlayıcı (Provider) Oluştur
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# 6. GitHub Reposunu Bağla
+gcloud iam service-accounts add-iam-policy-binding "github-deploy@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --project="${PROJECT_ID}" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')/locations/global/workloadIdentityPools/github-pool/attribute.repository/${GITHUB_REPO}"
+
+# 7. Çıktı Ver
+echo ""
+echo "----------------------------------------------------------------"
+echo "GITHUB SECRET OLARAK EKLEMENİZ GEREKENLER:"
+echo "----------------------------------------------------------------"
+echo "GCP_PROJECT_ID: ${PROJECT_ID}"
+echo "GCP_SERVICE_ACCOUNT: github-deploy@${PROJECT_ID}.iam.gserviceaccount.com"
+echo "GCP_WORKLOAD_IDENTITY_PROVIDER: projects/$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+echo "GOOGLE_API_KEY: (Gemini API Key'iniz)"
+echo "----------------------------------------------------------------"
+```
 
 ## 2. Adım: GitHub Depo Ayarları
 
-1.  GitHub projenize gidin.
-2.  **Settings** > **Secrets and variables** > **Actions** menüsüne tıklayın.
-3.  "New repository secret" butonuna tıklayarak aşağıdaki 3 bilgiyi ekleyin:
+1.  Cloud Shell çıktısında size verilen **3 değeri** kopyalayın.
+2.  GitHub projenize gidin.
+3.  **Settings** > **Secrets and variables** > **Actions** menüsüne tıklayın.
+4.  "New repository secret" butonuna tıklayarak aşağıdaki 4 bilgiyi ekleyin:
 
 | İsim (Name) | Değer (Value) |
 | :--- | :--- |
-| `GCP_PROJECT_ID` | Proje Kimliğiniz (1.1. adımda not ettiğiniz) |
-| `GCP_SA_KEY` | İndirdiğiniz JSON dosyasının *tüm içeriğini* kopyalayıp buraya yapıştırın. |
-| `GOOGLE_API_KEY` | Gemini API Anahtarınız (`AIza...` ile başlayan) |
+| `GCP_PROJECT_ID` | Proje Kimliğiniz |
+| `GCP_SERVICE_ACCOUNT` | `github-deploy@...` ile biten adres |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/...` ile başlayan uzun adres |
+| `GOOGLE_API_KEY` | Gemini API Anahtarınız |
 
 ## 3. Adım: Dağıtımı Başlatın
 
-1.  `main` (ana) dalına (branch) herhangi bir değişiklik gönderin (push).
-2.  İşlemi canlı izlemek için GitHub'da "Actions" sekmesine gidin.
-3.  İşlem bittiğinde, "Deploy to Cloud Run" adımına tıklayarak uygulamanızın **Service URL**'ini (Web Sitesi Linki) görebilirsiniz.
-
-## Maliyet Hakkında Not
-*   **Cloud Run**: Sadece kod çalıştığında (siteye istek geldiğinde) ücret ödersiniz.
-*   **Container Registry**: Docker imajlarınızın saklanması için çok küçük bir depolama ücreti çıkabilir.
+1.  Bu değişiklikleri GitHub'a gönderin (Push).
+2.  Actions sekmesinden izleyin.
