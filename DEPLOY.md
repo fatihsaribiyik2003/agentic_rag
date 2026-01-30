@@ -1,61 +1,61 @@
-# Cloud Run Deployment Guide
+# Cloud Run Dağıtım Rehberi
 
-This guide explains how to deploy this application to Google Cloud Run using the included GitHub Actions workflow.
+Bu rehber, dahil edilen GitHub Actions iş akışını kullanarak bu uygulamayı Google Cloud Run'a nasıl dağıtacağınızı (deploy edeceğinizi) açıklar.
 
-## Prerequisites
+## Ön Gereksinimler
 
-1.  A Google Cloud Platform (GCP) Account.
-2.  Access to this GitHub Repository.
+1.  Bir Google Cloud Platform (GCP) Hesabı.
+2.  Bu GitHub Deposuna (Repository) erişim.
 
-## Step 1: Google Cloud Setup
+## 1. Adım: Google Cloud Kurulumu
 
-1.  **Create a Project**:
-    *   Go to [Google Cloud Console](https://console.cloud.google.com/).
-    *   Create a new project (e.g., `agentic-rag-prod`).
-    *   Note down the **Project ID** (e.g., `agentic-rag-prod-12345`).
+1.  **Proje Oluşturun**:
+    *   [Google Cloud Console](https://console.cloud.google.com/) adresine gidin.
+    *   Yeni bir proje oluşturun (örneğin: `agentic-rag-prod`).
+    *   **Project ID** (Proje Kimliği) değerini bir kenara not edin (örneğin: `agentic-rag-prod-12345`).
 
-2.  **Enable APIs**:
-    *   Go to "APIs & Services" > "Enabled APIs & services".
-    *   Click "+ ENABLE APIS AND SERVICES".
-    *   Search for and enable the following:
+2.  **API'leri Etkinleştirin**:
+    *   Menüden "APIs & Services" > "Enabled APIs & services" kısmına gidin.
+    *   "+ ENABLE APIS AND SERVICES" butonuna tıklayın.
+    *   Aşağıdaki servisleri aratıp etkinleştirin (Enable):
         *   **Cloud Run Admin API**
-        *   **Container Registry API** (or Artifact Registry API)
-        *   **Cloud Build API** (optional, but good practice)
+        *   **Container Registry API** (veya Artifact Registry API)
+        *   **Cloud Build API** (isteğe bağlı, ama önerilir)
 
-3.  **Create Service Account**:
-    *   Go to "IAM & Admin" > "Service Accounts".
-    *   Click "+ CREATE SERVICE ACCOUNT".
-    *   Name: `github-deploy`.
-    *   **Roles**: Grant the following roles:
+3.  **Servis Hesabı (Service Account) Oluşturun**:
+    *   "IAM & Admin" > "Service Accounts" kısmına gidin.
+    *   "+ CREATE SERVICE ACCOUNT" butonuna tıklayın.
+    *   İsim: `github-deploy` (veya istediğiniz bir isim).
+    *   **Roller (Roles)**: Aşağıdaki yetkileri verin:
         *   `Cloud Run Admin`
         *   `Service Account User`
-        *   `Storage Admin` (for Container Registry)
-    *   Click "Done".
+        *   `Storage Admin` (Container Registry için)
+    *   "Done" diyerek bitirin.
 
-4.  **Create Key**:
-    *   Click on the newly created service account (e.g., `github-deploy@...`).
-    *   Go to the "Keys" tab.
-    *   "Add Key" > "Create new key" > **JSON**.
-    *   The file will download automatically. **Keep this safe!**
+4.  **Anahtar (Key) Oluşturun**:
+    *   Yeni oluşturduğunuz servis hesabına tıklayın (örn: `github-deploy@...`).
+    *   "Keys" sekmesine gelin.
+    *   "Add Key" > "Create new key" seçeneğini tıklayın ve **JSON** formatını seçin.
+    *   Dosya bilgisayarınıza inecek. **Bu dosyayı kaybetmeyin ve kimseyle paylaşmayın!**
 
-## Step 2: GitHub Repository Setup
+## 2. Adım: GitHub Depo Ayarları
 
-1.  Go to your GitHub repository.
-2.  Click **Settings** > **Secrets and variables** > **Actions**.
-3.  Click "New repository secret" and add the following:
+1.  GitHub projenize gidin.
+2.  **Settings** > **Secrets and variables** > **Actions** menüsüne tıklayın.
+3.  "New repository secret" butonuna tıklayarak aşağıdaki 3 bilgiyi ekleyin:
 
-| Name | Value |
+| İsim (Name) | Değer (Value) |
 | :--- | :--- |
-| `GCP_PROJECT_ID` | Your Project ID (from Step 1.1) |
-| `GCP_SA_KEY` | Paste the *entire content* of the JSON key file you downloaded. |
-| `GOOGLE_API_KEY` | Your Gemini API Key (starts with `AIza...`) |
+| `GCP_PROJECT_ID` | Proje Kimliğiniz (1.1. adımda not ettiğiniz) |
+| `GCP_SA_KEY` | İndirdiğiniz JSON dosyasının *tüm içeriğini* kopyalayıp buraya yapıştırın. |
+| `GOOGLE_API_KEY` | Gemini API Anahtarınız (`AIza...` ile başlayan) |
 
-## Step 3: Trigger Deployment
+## 3. Adım: Dağıtımı Başlatın
 
-1.  Push any change to the `main` branch.
-2.  Go to the "Actions" tab in GitHub to watch the deployment.
-3.  Once finished, click the "Deploy to Cloud Run" step to see the **Service URL**.
+1.  `main` (ana) dalına (branch) herhangi bir değişiklik gönderin (push).
+2.  İşlemi canlı izlemek için GitHub'da "Actions" sekmesine gidin.
+3.  İşlem bittiğinde, "Deploy to Cloud Run" adımına tıklayarak uygulamanızın **Service URL**'ini (Web Sitesi Linki) görebilirsiniz.
 
-## Cost Note
-*   **Cloud Run**: You pay only when the code runs (per request).
-*   **Container Registry**: Small storage fee for the Docker images.
+## Maliyet Hakkında Not
+*   **Cloud Run**: Sadece kod çalıştığında (siteye istek geldiğinde) ücret ödersiniz.
+*   **Container Registry**: Docker imajlarınızın saklanması için çok küçük bir depolama ücreti çıkabilir.
