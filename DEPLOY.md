@@ -16,7 +16,7 @@ Kuruluşunuz (Organization) güvenlik nedeniyle "Key" (Anahtar) oluşturmayı en
 
 ```bash
 # --- AYARLAR (BURAYI KENDİNİZE GÖRE DÜZENLEMEYİN, OTOMATİK AYARLANMIŞTIR) ---
-export PROJECT_ID="agentic-rag-prod-12345"  # <--- BURAYA KENDİ PROJE ID'NİZİ YAZIN!!!
+export PROJECT_ID="project-33f269e2-c8b3-4f34-a2a"  # <--- BURAYA KENDİ PROJE ID'NİZİ YAZIN!!!
 export GITHUB_REPO="fatihsaribiyik2003/agentic_rag" # GitHub kullanıcı/repo adınız
 # ----------------------------------------------------------------------------
 
@@ -100,3 +100,34 @@ echo "----------------------------------------------------------------"
 
 1.  Bu değişiklikleri GitHub'a gönderin (Push).
 2.  Actions sekmesinden izleyin.
+
+---
+
+## SORUN GİDERME (HATA ALIRSANIZ)
+
+Eğer "Invalid Target" veya "Authentication Failed" hatası alıyorsanız, aşağıdaki "Tamir Kodu"nu Cloud Shell'e yapıştırın. Bu kod mevcut ayarları silip her şeyi sıfırdan doğrusuyla kurar:
+
+```bash
+# --- TAMİR KODU ---
+export PROJECT_ID="project-33f269e2-c8b3-4f34-a2a"
+export GITHUB_REPO="fatihsaribiyik2003/agentic_rag"
+
+# Eskiyi Sil
+gcloud iam workload-identity-pools providers delete "github-provider" \
+  --project="${PROJECT_ID}" --location="global" --workload-identity-pool="github-pool" --quiet || true
+
+# Yenisini Kur
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# Yeni Değeri Ver
+echo "YENİ SECRET DEĞERİNİZ:"
+gcloud iam workload-identity-pools providers describe "github-provider" \
+  --project="${PROJECT_ID}" --location="global" --workload-identity-pool="github-pool" --format="value(name)"
+```
+Bu kodun verdiği yeni sonucu GitHub Secret'a tekrar ekleyin.
