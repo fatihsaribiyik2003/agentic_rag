@@ -1,5 +1,5 @@
 # Agentic RAG with LangGraph & Google Gemini
-
+:thats projects was created by @fatihsaribiyik2003 
 This project implements an **Agentic RAG (Retrieval Augmented Generation)** system using LangGraph and Google's Gemini models.
 
 ## Features
