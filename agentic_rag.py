@@ -90,8 +90,49 @@ class GraphState(TypedDict):
     question: str
     generation: str
     documents: List[str]
+    sub_questions: List[str]
 
 # --- Nodes ---
+
+def decompose_query(state):
+    """
+    Decompose the query into sub-questions.
+    """
+    print("---DECOMPOSE QUERY---")
+    question = state["question"]
+    
+    # Prompt to decompose
+    prompt = PromptTemplate(
+        template="""You are a helpful assistant that breaks down a complex question into simpler sub-questions.
+        
+        STRICT RULES:
+        1. Only generate sub-questions that are NECESSARY to answer the original question.
+        2. Do NOT add questions about topics not mentioned or implied in the original question.
+        3. Do NOT hallucinate specific details (like visa, school, job) if not mentioned.
+        4. If the question is simple, just return the original question as the only sub-question.
+        
+        Original question: {question}
+        
+        Output a JSON object with a key 'sub_questions' being a list of strings.
+        Example: {{"sub_questions": ["What is X?", "What is Y?"]}}
+        """,
+        input_variables=["question"],
+    )
+    
+    chain = prompt | llm | JsonOutputParser()
+    try:
+        response = chain.invoke({"question": question})
+        sub_questions = response.get("sub_questions", [question])
+    except Exception as e:
+        print(f"Decomposition failed: {e}")
+        sub_questions = [question]
+        
+    # Validation
+    if not sub_questions:
+        sub_questions = [question]
+        
+    print(f"Generated sub-questions: {sub_questions}")
+    return {"sub_questions": sub_questions}
 
 def retrieve(state):
     """
@@ -99,8 +140,22 @@ def retrieve(state):
     """
     print("---RETRIEVE---")
     question = state["question"]
-    documents = retriever.invoke(question)
-    return {"documents": documents, "question": question}
+    sub_questions = state.get("sub_questions", [question])
+    
+    all_documents = []
+    seen_content = set()
+    
+    for q in sub_questions:
+        print(f"Searching for: {q}")
+        documents = retriever.invoke(q)
+        for doc in documents:
+            # Simple deductive based on page content to avoid duplicates from overlapping searches
+            if doc.page_content not in seen_content:
+                seen_content.add(doc.page_content)
+                all_documents.append(doc)
+    
+    print(f"Total unique documents retrieved: {len(all_documents)}")
+    return {"documents": all_documents, "question": question}
 
 def grade_documents(state):
     """
@@ -115,7 +170,7 @@ def grade_documents(state):
         template="""You are a grader assessing relevance of a retrieved document to a user question. \n 
         Here is the retrieved document: \n\n {document} \n\n
         Here is the user question: {question} \n
-        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n
+        If the document contains keyword(s) or semantic meaning related to ANY PART of the user question, grade it as relevant. \n
         Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n
         Provide the binary score as a JSON with a single key 'score' and no premable or explanation.""",
         input_variables=["question", "document"],
@@ -183,12 +238,14 @@ def decide_to_generate(state):
 workflow = StateGraph(GraphState)
 
 # Define the nodes
+workflow.add_node("decompose_query", decompose_query)
 workflow.add_node("retrieve", retrieve)
 workflow.add_node("grade_documents", grade_documents)
 workflow.add_node("generate", generate)
 
 # Build graph
-workflow.add_edge(START, "retrieve")
+workflow.add_edge(START, "decompose_query")
+workflow.add_edge("decompose_query", "retrieve")
 workflow.add_edge("retrieve", "grade_documents")
 
 # Conditional edge
