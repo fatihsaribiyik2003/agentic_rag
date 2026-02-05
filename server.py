@@ -18,6 +18,8 @@ class QuestionRequest(BaseModel):
 
 class AnswerResponse(BaseModel):
     answer: str
+    success: bool
+    message: str
 
 @app.on_event("startup")
 async def startup_event():
@@ -37,9 +39,17 @@ async def ask_question(request: QuestionRequest):
         final_result = rag_app.invoke(inputs)
         
         if "generation" in final_result:
-            return AnswerResponse(answer=final_result["generation"])
+            return AnswerResponse(
+                answer=final_result["generation"],
+                success=True,
+                message="Answer found in the documents."
+            )
         else:
-            return AnswerResponse(answer="Could not generate an answer (No relevant documents found or other issue).")
+            return AnswerResponse(
+                answer="I could not find an answer to your question in the provided documents.",
+                success=False,
+                message="No relevant documents found in the database."
+            )
             
     except Exception as e:
         print(f"Error processing request: {e}")
