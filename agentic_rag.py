@@ -90,7 +90,14 @@ class GraphState(TypedDict):
     question: str
     generation: str
     documents: List[str]
+    """
+    Represents the state of our graph.
+    """
+    question: str
+    generation: str
+    documents: List[str]
     sub_questions: List[str]
+    chat_history: List[str] # added chat_history
 
 # --- Nodes ---
 
@@ -103,25 +110,39 @@ def decompose_query(state):
     
     # Prompt to decompose
     prompt = PromptTemplate(
-        template="""You are a helpful assistant that breaks down a complex question into simpler sub-questions.
+        template="""Sen karmaşık bir soruyu daha basit alt sorulara bölen akıllı bir asistansın.
         
-        STRICT RULES:
-        1. Only generate sub-questions that are NECESSARY to answer the original question.
-        2. Do NOT add questions about topics not mentioned or implied in the original question.
-        3. Do NOT hallucinate specific details (like visa, school, job) if not mentioned.
-        4. If the question is simple, just return the original question as the only sub-question.
+        GEÇMİŞ KONUŞMA:
+        {chat_history}
         
-        Original question: {question}
+        GÖREVİN:
+        Kullanıcının sorduğu soruyu analiz et. Eğer soru geçmiş konuşmaya atıfta bulunuyorsa (örneğin "bu ne demek", "olmadı" gibi), geçmişi kullanarak soruyu netleştir.
+        Soruyu cevaplamak için gereken alt soruları listele.
         
-        Output a JSON object with a key 'sub_questions' being a list of strings.
-        Example: {{"sub_questions": ["What is X?", "What is Y?"]}}
+        KURALLAR:
+        1. Sadece gerekli olan soruları üret.
+        2. Geçmiş konuşmayı dikkate alarak eksik bilgileri tamamla (Coreference Resolution).
+        3. Eğer soru zaten basitse, onu olduğu gibi listeye ekle.
+        4. CEVABI SADECE JSON FORMATINDA VER. Başka hiçbir metin ekleme.
+        
+        Orijinal Soru: {question}
+        
+        İstenen JSON Formatı:
+        {{
+            "sub_questions": ["Soru 1?", "Soru 2?"]
+        }}
         """,
-        input_variables=["question"],
+        input_variables=["question", "chat_history"],
     )
     
     chain = prompt | llm | JsonOutputParser()
     try:
-        response = chain.invoke({"question": question})
+        # Pass chat_history from state, default to empty list if none
+        history = state.get("chat_history", [])
+        # Format history as a string for the prompt
+        formatted_history = "\\n".join(history) if history else "Yok"
+        
+        response = chain.invoke({"question": question, "chat_history": formatted_history})
         sub_questions = response.get("sub_questions", [question])
     except Exception as e:
         print(f"Decomposition failed: {e}")
@@ -167,12 +188,12 @@ def grade_documents(state):
     
     # Grader prompt
     prompt = PromptTemplate(
-        template="""You are a grader assessing relevance of a retrieved document to a user question. \n 
-        Here is the retrieved document: \n\n {document} \n\n
-        Here is the user question: {question} \n
-        If the document contains keyword(s) or semantic meaning related to ANY PART of the user question, grade it as relevant. \n
-        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n
-        Provide the binary score as a JSON with a single key 'score' and no premable or explanation.""",
+        template="""Sen bir belge değerlendiricisisin. Bir belgenin kullanıcının sorusuyla alakalı olup olmadığını kontrol ediyorsun. \n 
+        İşte alınan belge: \n\n {document} \n\n
+        İşte kullanıcının sorusu: {question} \n
+        Eğer belge kullanıcının sorusunun HERHANGİ BİR KISMI ile ilgili anahtar kelimeler veya anlamsal içerik barındırıyorsa, onu alakalı olarak işaretle. \n
+        Belgenin soruyla ilgili olup olmadığını belirtmek için 'yes' (evet) veya 'no' (hayır) şeklinde ikili bir puan ver. \n
+        Puanı tek bir 'score' anahtarı içeren JSON formatında ver, başka hiçbir açıklama yapma.""",
         input_variables=["question", "document"],
     )
     
@@ -201,11 +222,11 @@ def generate(state):
     
     # Generation prompt
     prompt = PromptTemplate(
-        template="""You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+        template="""Sen soru cevaplayan bir asistansın. Aşağıdaki bağlamı (context) kullanarak soruyu cevapla. Eğer cevabı bilmiyorsan, sadece bilmediğini söyle. Cevabı maksimum üç cümle ile kısa ve öz tut. Sorular Türkçe ise cevaplarda türkçe olsun.
         
-        Question: {question} 
-        Context: {context} 
-        Answer:""",
+        Soru: {question} 
+        Bağlam: {context} 
+        Cevap:""",
         input_variables=["question", "context"],
     )
     
@@ -215,6 +236,62 @@ def generate(state):
     return {"documents": documents, "question": question, "generation": generation}
 
 # --- Conditional Edges ---
+
+def route_query(state):
+    """
+    Route query to RAG or Chitchat.
+    """
+    print("---ROUTE QUERY---")
+    question = state["question"]
+    
+    prompt = PromptTemplate(
+        template="""Sen gelen mesajları sınıflandıran bir uzmansın.
+        Gelen mesajın "TEKNİK" (SADOS, eğitim, sınav, sertifika, ödeme, giriş sorunları) mi yoksa "SOHBET" (selamlaşma, teşekkür, şikayet, sitem, rastgele konuşma) mi olduğuna karar ver.
+
+        Mesaj: {question}
+
+        Sadece 'RAG' (teknikse) veya 'CHITCHAT' (sohbetse) kelimesini döndür.
+        """,
+        input_variables=["question"],
+    )
+    
+    chain = prompt | llm | StrOutputParser()
+    decision = chain.invoke({"question": question})
+    
+    if "RAG" in decision:
+        print("---DECISION: ROUTE TO RAG---")
+        return "rag"
+    else:
+        print("---DECISION: ROUTE TO CHITCHAT---")
+        return "chitchat"
+
+def handle_chitchat(state):
+    """
+    Handle chitchat messages without retrieval.
+    """
+    print("---HANDLE CHITCHAT---")
+    question = state["question"]
+    chat_history = state.get("chat_history", [])
+    formatted_history = "\\n".join(chat_history) if chat_history else "Yok"
+
+    prompt = PromptTemplate(
+        template="""Sen yardımsever bir müşteri hizmetleri asistanısın.
+        Kullanıcının mesajına, geçmiş konuşmayı da dikkate alarak nazik, profesyonel ve insancıl bir cevap ver.
+        
+        GEÇMİŞ KONUŞMA:
+        {chat_history}
+        
+        Kullanıcı Mesajı: {question}
+        
+        Cevap:""",
+        input_variables=["question", "chat_history"],
+    )
+    
+    chain = prompt | llm | StrOutputParser()
+    generation = chain.invoke({"question": question, "chat_history": formatted_history})
+    
+    return {"generation": generation}
+
 
 def decide_to_generate(state):
     """
@@ -242,9 +319,19 @@ workflow.add_node("decompose_query", decompose_query)
 workflow.add_node("retrieve", retrieve)
 workflow.add_node("grade_documents", grade_documents)
 workflow.add_node("generate", generate)
+workflow.add_node("handle_chitchat", handle_chitchat) # Added node
 
 # Build graph
-workflow.add_edge(START, "decompose_query")
+# Replace START -> decompose with Conditional Edge
+workflow.add_conditional_edges(
+    START,
+    route_query,
+    {
+        "rag": "decompose_query",
+        "chitchat": "handle_chitchat",
+    },
+)
+
 workflow.add_edge("decompose_query", "retrieve")
 workflow.add_edge("retrieve", "grade_documents")
 
@@ -258,6 +345,7 @@ workflow.add_conditional_edges(
     },
 )
 workflow.add_edge("generate", END)
+workflow.add_edge("handle_chitchat", END) # Edge for chitchat
 
 # Compile
 app = workflow.compile()
@@ -278,12 +366,16 @@ def main():
         return
 
     print("\n--- Interaction ---")
+    chat_history = []
     while True:
         question = input("\nAsk a question (or 'q' to quit): ")
+        if not question.strip():
+            continue
+            
         if question.lower() in ["q", "quit"]:
             break
             
-        inputs = {"question": question}
+        inputs = {"question": question, "chat_history": chat_history}
         try:
             for output in app.stream(inputs):
                 for key, value in output.items():
@@ -297,7 +389,15 @@ def main():
             
             final_result = app.invoke(inputs)
             if "generation" in final_result:
-                print(f"\nAnswer: {final_result['generation']}")
+                answer = final_result['generation']
+                print(f"\nAnswer: {answer}")
+                
+                # Update Chat History
+                chat_history.append(f"Kullanıcı: {question}")
+                chat_history.append(f"Asistan: {answer}")
+                # Keep only last 10 messages to avoid huge prompts
+                if len(chat_history) > 10:
+                    chat_history = chat_history[-10:]
             else:
                 print("\nCould not generate an answer (No relevant documents found).")
                 
