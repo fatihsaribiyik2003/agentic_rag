@@ -122,14 +122,17 @@ def decompose_query(state):
         KURALLAR:
         1. Sadece gerekli olan soruları üret.
         2. Geçmiş konuşmayı dikkate alarak eksik bilgileri tamamla (Coreference Resolution).
-        3. Eğer soru zaten basitse, onu olduğu gibi listeye ekle.
+        3. SORGU GENİŞLETME (ÖNEMLİ): Eğer soru bir işlemin nasıl yapılacağını soruyorsa, mutlaka 3 farklı varyasyon üret:
+           a) Orijinal soru (örn: "nasıl üye olurum")
+           b) Resmi/Edilgen hali (örn: "üyelik işlemleri nasıl yapılır", "üyelik başvuru süreci")
+           c) Gereklilik hali (örn: "üyelik için gerekli belgeler nelerdir")
         4. CEVABI SADECE JSON FORMATINDA VER. Başka hiçbir metin ekleme.
         
         Orijinal Soru: {question}
         
         İstenen JSON Formatı:
         {{
-            "sub_questions": ["Soru 1?", "Soru 2?"]
+            "sub_questions": ["Orijinal Soru?", "Resmi Soru Varyasyonu?", "Gereklilik Soru Varyasyonu?"]
         }}
         """,
         input_variables=["question", "chat_history"],
@@ -222,11 +225,23 @@ def generate(state):
     
     # Generation prompt
     prompt = PromptTemplate(
-        template="""Sen soru cevaplayan bir asistansın. Aşağıdaki bağlamı (context) kullanarak soruyu cevapla. Eğer cevabı bilmiyorsan, sadece bilmediğini söyle. Cevabı maksimum üç cümle ile kısa ve öz tut. Sorular Türkçe ise cevaplarda türkçe olsun.
+        template="""Sen yardımsever, özgüvenli ve çözüm odaklı bir müşteri hizmetleri temsilcisisin.
+        
+        GÖREVİN:
+        Aşağıdaki bilgi parçalarını kullanarak müşterinin sorusuna DOĞRUDAN ve NET bir cevap ver.
+        
+        KURALLAR:
+        1. ASLA "Belgede yazıyor", "Bağlamda belirtilmiş", "Dokümana göre" gibi ifadeler kullanma. Sanki bu bilgileri ezbere biliyormuşsun gibi konuş.
+        2. Müşteriye "SİZ" diliyle hitap et (Örn: "Yapabilirsiniz", "Edersiniz").
+        3. Eğer net bir adım-adım kılavuz yoksa bile, elindeki ipuçlarını birleştirerek en mantıklı yolu tarif et. (Örn: "Sisteme giriş ekranından kayıt olabilirsiniz").
+        4. Olumsuz konuşma ("Bilgi yok" deme). Onun yerine alternatif çözüm sun ("Bu konuda en doğru bilgiyi öğrenci işlerinden alabilirsiniz" de).
+        5. Cevabı kısa tut (Maksimum 3-4 cümle).
+        6. Her zaman TÜRKÇE cevap ver.
         
         Soru: {question} 
-        Bağlam: {context} 
-        Cevap:""",
+        Bilgi Parçaları: {context} 
+        
+        Senin Cevabın:""",
         input_variables=["question", "context"],
     )
     
