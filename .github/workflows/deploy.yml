@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - main
+      - 'client/**'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  SERVICE_NAME: agentic-rag-service
+  # Service Name will be set dynamically in the workflow
   REGION: us-central1
 
 jobs:
@@ -21,6 +22,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set Service Name
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "SERVICE_NAME=agentic-rag-main" >> $GITHUB_ENV
+          else
+            # Extract client name: client/abc -> abc
+            # Convert to lowercase and replace non-alphanumeric with hyphen for Cloud Run compatibility
+            CLEAN_NAME=$(echo "${{ github.ref_name }}" | sed 's/^client\///' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
+            echo "SERVICE_NAME=agentic-rag-$CLEAN_NAME" >> $GITHUB_ENV
+          fi
+          echo "Deploying to service: agentic-rag-$CLEAN_NAME"
 
       - name: Google Auth
         id: auth
@@ -37,8 +50,8 @@ jobs:
 
       - name: Build and Push Container
         run: |
-          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/repo-agentic/$SERVICE_NAME:${{ github.sha }} .
-          docker push us-central1-docker.pkg.dev/$PROJECT_ID/repo-agentic/$SERVICE_NAME:${{ github.sha }}
+          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/repo-agentic/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/repo-agentic/${{ env.SERVICE_NAME }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
