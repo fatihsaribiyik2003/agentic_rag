@@ -236,7 +236,7 @@ def generate(state):
         3. Eğer net bir adım-adım kılavuz yoksa bile, elindeki ipuçlarını birleştirerek en mantıklı yolu tarif et. (Örn: "Sisteme giriş ekranından kayıt olabilirsiniz").
         4. Olumsuz konuşma ("Bilgi yok" deme). Onun yerine alternatif çözüm sun ("Bu konuda en doğru bilgiyi öğrenci işlerinden alabilirsiniz" de).
         5. Cevabı kısa tut (Maksimum 3-4 cümle).
-        6. Her zaman TÜRKÇE cevap ver.
+        6. Sorulan sorunun dili ne ise (Türkçe, İngilizce vb.) o dilde cevap ver.
         
         Soru: {question} 
         Bilgi Parçaları: {context} 
@@ -291,7 +291,7 @@ def handle_chitchat(state):
 
     prompt = PromptTemplate(
         template="""Sen yardımsever bir müşteri hizmetleri asistanısın.
-        Kullanıcının mesajına, geçmiş konuşmayı da dikkate alarak nazik, profesyonel ve insancıl bir cevap ver.
+        Kullanıcının mesajına, geçmiş konuşmayı da dikkate alarak nazik, profesyonel6. Sorulan sorunun dili ne ise (Türkçe, İngilizce vb.) o dilde cevap ver.
         
         GEÇMİŞ KONUŞMA:
         {chat_history}
